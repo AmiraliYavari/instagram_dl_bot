@@ -58,7 +58,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "5️⃣ ربات فایل را دانلود کرده و برای شما ارسال می‌کند.\n\n"
             "⚠️ نکات مهم:\n"
             "- فقط محتوای *عمومی* (public) قابل دانلود است.\n"
-            "- حداکثر حجم مجاز برای ارسال ویدیو در تلگرام **50 مگابایت** است."
+            "- حداکثر حجم مجاز برای ارسال ویدیو در تلگرام **50 مگابایت** است.\n"
+            "- در صورت قطع شدن دانلود، ربات به شما اطلاع می‌دهد."
         )
         await query.edit_message_text(help_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
@@ -66,7 +67,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "about":
         about_text = (
             "🤖 *ربات دانلودر اینستاگرام*\n\n"
-            "نسخه: 2.2\n"
+            "نسخه: 2.3\n"
             "ساخته شده با پایتون\n\n"
             "📂 کد منبع:\n[GitHub Repository](https://github.com/YOUR_USERNAME/instagram_downloader_telegram_bot)\n\n"
             "💡 ربات متن‌باز است."
@@ -100,19 +101,27 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ])
                 )
             return
-        
+
+        # نمایش پیام در حال دانلود
         if context.user_data.get('is_photo_message'):
             await query.edit_message_caption(
-                caption="⏬ در حال دانلود ویدیو با کیفیت انتخابی...",
+                caption="⏬ در حال دانلود ویدیو با کیفیت انتخابی... (لطفاً صبر کنید)",
                 reply_markup=None
             )
         else:
-            await query.edit_message_text("⏬ در حال دانلود ویدیو با کیفیت انتخابی...")
-        
+            await query.edit_message_text("⏬ در حال دانلود ویدیو با کیفیت انتخابی... (لطفاً صبر کنید)")
+
         file_path = await download_instagram(url, format_id)
-        
+
         if not file_path or not os.path.exists(file_path):
-            error_msg = "❌ دانلود ناموفق.\nلطفاً دوباره تلاش کنید یا کیفیت دیگری را انتخاب کنید."
+            error_msg = (
+                "❌ دانلود ناتمام ماند.\n"
+                "دلایل احتمالی:\n"
+                "- اینترنت قطع شده است\n"
+                "- اینستاگرام درخواست را مسدود کرده\n"
+                "- حجم ویدیو بسیار بالا است\n\n"
+                "لطفاً دوباره تلاش کنید یا کیفیت پایین‌تری انتخاب کنید."
+            )
             if context.user_data.get('is_photo_message'):
                 await query.edit_message_caption(
                     caption=error_msg,
@@ -128,7 +137,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ])
                 )
             return
-        
+
+        # ارسال فایل
         try:
             with open(file_path, 'rb') as video:
                 await update.effective_chat.send_video(
@@ -177,7 +187,7 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
     status_msg = await update.message.reply_text("⏳ در حال دریافت اطلاعات ویدیو...")
 
     video_info = await get_video_info(url)
-    
+
     if not video_info:
         await status_msg.edit_text(
             "❌ نتوانستم اطلاعات ویدیو را دریافت کنم.\nممکن است لینک خصوصی باشد یا اینستاگرام محدودیت ایجاد کرده باشد.",
@@ -186,7 +196,7 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
             ])
         )
         return
-    
+
     formats = video_info.get('formats', [])
     if not formats:
         await status_msg.edit_text(
@@ -210,16 +220,16 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         size_mb = fmt['size_mb']
         size_text = f" ({size_mb} MB)" if size_mb != 'Unknown' else ""
         format_id = fmt['format_id']
-        
+
         if size_mb != 'Unknown' and size_mb > MAX_VIDEO_SIZE_MB:
             button_text = f"⚠️ {quality_label}{size_text} - حجم بالاست ⚠️"
             keyboard.append([InlineKeyboardButton(button_text, callback_data="size_error")])
         else:
             button_text = f"📹 {quality_label}{size_text}"
             keyboard.append([InlineKeyboardButton(button_text, callback_data=f"download_format_{format_id}")])
-    
+
     keyboard.append([InlineKeyboardButton("🔙 انصراف و بازگشت به منو", callback_data="back_to_menu")])
-    
+
     duration = video_info.get('duration')
     if duration and isinstance(duration, (int, float)):
         minutes = int(duration // 60)
@@ -227,14 +237,14 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         duration_str = f"{minutes}:{seconds:02d}"
     else:
         duration_str = "نامشخص"
-    
+
     caption = (
         f"🎬 *{video_info['title'][:50]}*\n\n"
         f"⏱️ مدت زمان: {duration_str}\n\n"
         f"📊 کیفیت‌های موجود:\n"
         f"لطفاً کیفیت مورد نظر خود را انتخاب کنید:"
     )
-    
+
     thumbnail = video_info.get('thumbnail')
     if thumbnail:
         await status_msg.delete()
@@ -278,7 +288,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_link))
     app.add_error_handler(error_handler)
 
-    print("ربات با منوی انتخاب کیفیت (نسخه نهایی) روشن شد...")
+    print("ربات با منوی انتخاب کیفیت (نسخه نهایی با مدیریت خطای دانلود) روشن شد...")
     app.run_polling()
 
 if __name__ == "__main__":
