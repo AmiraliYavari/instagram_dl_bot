@@ -12,25 +12,39 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 
 MAX_VIDEO_SIZE_MB = 48
 
+# ========== منوهای زیبا با دکمه‌های شیشه‌ای ==========
+
 async def main_menu():
+    """منوی اصلی با دکمه‌های جذاب"""
     keyboard = [
-        [InlineKeyboardButton("📥 دانلود از اینستاگرام", callback_data="download")],
-        [InlineKeyboardButton("📖 راهنما", callback_data="help")],
-        [InlineKeyboardButton("ℹ️ درباره ربات", callback_data="about")]
+        [InlineKeyboardButton("🎥 دانلود ویدیو / ریلز", callback_data="download")],
+        [InlineKeyboardButton("📖 راهنمای کامل", callback_data="help")],
+        [InlineKeyboardButton("ℹ️ درباره ربات", callback_data="about")],
+        [InlineKeyboardButton("📢 کانال پشتیبانی", url="https://t.me/your_channel")]  # در صورت تمایل لینک کانال خود را بگذارید
     ]
     return InlineKeyboardMarkup(keyboard)
 
 async def back_button():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]])
+    """دکمه بازگشت به منوی اصلی"""
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """پیام خوش‌آمدگویی با طراحی زیبا"""
     print("📩 دستور /start دریافت شد")
     welcome_text = (
-        "✨ به ربات دانلودر اینستاگرام خوش آمدید! ✨\n\n"
-        "من می‌توانم ویدیو و صوت را از اینستاگرام دانلود کنم.\n\n"
-        "✅ فقط کافیست یکی از گزینه‌های زیر را انتخاب کنید."
+        "✨ *به ربات دانلودر پیشرفته اینستاگرام خوش آمدید* ✨\n\n"
+        "من می‌توانم برای شما:\n"
+        "🎥 *ویدیو* (پست، ریلز، استوری، هایلایت)\n"
+        "🎵 *صدای ویدیوها (MP3)*\n"
+        "📸 *عکس* (در آینده)\n"
+        "را با کیفیت دلخواه دانلود کنم.\n\n"
+        "🔰 *کافیست یکی از گزینه‌های زیر را انتخاب کنید*"
     )
-    await update.message.reply_text(welcome_text, reply_markup=await main_menu())
+    await update.message.reply_text(
+        welcome_text,
+        parse_mode="Markdown",
+        reply_markup=await main_menu()
+    )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -43,52 +57,96 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
 
     if data == "download":
+        msg = (
+            "🔗 *لطفاً لینک اینستاگرام را ارسال کنید*\n\n"
+            "مثال‌ها:\n"
+            "`https://www.instagram.com/p/Cxample/`\n"
+            "`https://www.instagram.com/reel/DZkwbbmMBQ3/`\n\n"
+            "✅ پس از ارسال لینک، ربات کیفیت‌های موجود را به شما نمایش می‌دهد."
+        )
         await query.edit_message_text(
-            "🔗 لطفاً لینک اینستاگرام را ارسال کنید.\nمثال: `https://www.instagram.com/p/Cxample/`",
+            msg,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
+                [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_menu")]
             ])
         )
     elif data == "help":
-        help_text = "📖 راهنما: لینک اینستاگرام را بفرستید، سپس کیفیت ویدیو یا صوت را انتخاب کنید."
-        await query.edit_message_text(help_text, parse_mode="Markdown", reply_markup=await back_button())
+        help_text = (
+            "📖 *راهنمای گام به گام استفاده از ربات* 📖\n\n"
+            "1️⃣ *ارسال لینک*: از دکمه «دانلود ویدیو» استفاده کنید و لینک اینستاگرام خود را بفرستید.\n"
+            "2️⃣ *دریافت اطلاعات*: ربات عنوان، مدت زمان، کاور و لیست کیفیت‌های موجود (به همراه حجم هرکدام) را نمایش می‌دهد.\n"
+            "3️⃣ *انتخاب کیفیت*: روی کیفیت دلخواه (مثلاً 720p یا 360p) کلیک کنید.\n"
+            "4️⃣ *دریافت فایل*: پس از چند ثانیه ویدیو یا صوت (در صورت انتخاب MP3) برای شما ارسال می‌شود.\n\n"
+            "⚠️ *نکات مهم*:\n"
+            "• ربات فقط محتوای *عمومی* (public) را پشتیبانی می‌کند.\n"
+            "• حداکثر حجم ارسال ویدیو در تلگرام ۵۰ مگابایت است – ویدیوهای بزرگتر را با کیفیت پایین‌تر دانلود کنید.\n"
+            "• برای دریافت *فقط صدا*، گزینه «MP3 (فقط صدا)» را انتخاب کنید.\n\n"
+            "💡 *نیاز به کمک بیشتر؟* از دکمه «درباره ربات» اطلاعات تماس و لینک گیت‌هاب را ببینید."
+        )
+        await query.edit_message_text(
+            help_text,
+            parse_mode="Markdown",
+            reply_markup=await back_button()
+        )
     elif data == "about":
-        about_text = "🤖 ربات دانلودر اینستاگرام - نسخه 3.2\nقابلیت دانلود ویدیو و MP3"
-        await query.edit_message_text(about_text, parse_mode="Markdown", reply_markup=await back_button())
+        about_text = (
+            "🤖 *درباره ربات پیشرفته اینستاگرام دانلودر* 🤖\n\n"
+            "📌 *نسخه*: `3.2`\n"
+            "👨‍💻 *توسعه‌دهنده*: [Amirali Yavari](https://github.com/AmiraliYavari)\n"
+            "📂 *متن‌باز*: پروژه کاملاً متن‌باز است و می‌توانید آن را در گیت‌هاب مشاهده کنید.\n"
+            "🔗 *لینک ریپازیتوری*: [GitHub Repository](https://github.com/AmiraliYavari/instagram_dl_bot)\n\n"
+            "✨ *قابلیت‌های کلیدی*:\n"
+            "• دانلود ویدیوهای اینستاگرام با هر کیفیتی (حتی 4K)\n"
+            "• استخراج صدای ویدیوها به صورت MP3 با کیفیت اصلی\n"
+            "• نمایش کاور، عنوان، مدت زمان و حجم فایل قبل از دانلود\n"
+            "• پشتیبانی از پروکسی (SOCKS5/HTTP) برای دور زدن تحریم‌ها\n"
+            "• رابط کاربری دکمه‌ای زیبا و سریع\n\n"
+            "💝 *حمایت*: اگر از ربات خوشتان می‌آید، به پروژه در گیت‌هاب ⭐ ستاره دهید."
+        )
+        await query.edit_message_text(
+            about_text,
+            parse_mode="Markdown",
+            disable_web_page_preview=True,
+            reply_markup=await back_button()
+        )
     elif data == "back_to_menu":
-        await query.edit_message_text("✨ منوی اصلی:", reply_markup=await main_menu())
+        await query.edit_message_text(
+            "✨ *به منوی اصلی خوش آمدید* ✨\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
+            parse_mode="Markdown",
+            reply_markup=await main_menu()
+        )
     elif data == "size_error":
         try:
-            await query.answer("حجم ویدیو بیشتر از 48 مگابایت است!", show_alert=True)
+            await query.answer("❌ حجم این ویدیو بیشتر از 48 مگابایت است! کیفیت پایین‌تری انتخاب کنید.", show_alert=True)
         except:
             pass
     elif data.startswith("download_video_"):
         format_id = data.replace("download_video_", "")
         url = context.user_data.get('pending_url')
         if not url:
-            await query.edit_message_text("❌ لینک منقضی شد.", reply_markup=await back_button())
+            await query.edit_message_text("❌ لینک منقضی شد. لطفاً دوباره /start کنید.", reply_markup=await back_button())
             return
         is_photo = context.user_data.get('is_photo_message', False)
         try:
             if is_photo:
-                await query.edit_message_caption(caption="⏬ در حال دانلود ویدیو...", reply_markup=None)
+                await query.edit_message_caption(caption="⏬ *در حال دانلود ویدیو...* لطفاً شکیبا باشید.", parse_mode="Markdown", reply_markup=None)
             else:
-                await query.edit_message_text("⏬ در حال دانلود ویدیو...", reply_markup=None)
+                await query.edit_message_text("⏬ *در حال دانلود ویدیو...* لطفاً شکیبا باشید.", parse_mode="Markdown", reply_markup=None)
         except:
             pass
         await download_and_send(update, query, url, format_id, is_photo, is_audio=False)
     elif data == "download_audio":
         url = context.user_data.get('pending_url')
         if not url:
-            await query.edit_message_text("❌ لینک منقضی شد.", reply_markup=await back_button())
+            await query.edit_message_text("❌ لینک منقضی شد. لطفاً دوباره /start کنید.", reply_markup=await back_button())
             return
         is_photo = context.user_data.get('is_photo_message', False)
         try:
             if is_photo:
-                await query.edit_message_caption(caption="⏬ در حال استخراج صدا...", reply_markup=None)
+                await query.edit_message_caption(caption="🎵 *در حال استخراج صدای ویدیو...*", parse_mode="Markdown", reply_markup=None)
             else:
-                await query.edit_message_text("⏬ در حال استخراج صدا...", reply_markup=None)
+                await query.edit_message_text("🎵 *در حال استخراج صدای ویدیو...*", parse_mode="Markdown", reply_markup=None)
         except:
             pass
         await download_and_send(update, query, url, None, is_photo, is_audio=True)
@@ -101,12 +159,12 @@ async def download_and_send(update, query, url, format_id, is_photo, is_audio=Fa
     print(f"✅ دانلود پایان یافت. زمان: {download_time:.2f} ثانیه. مسیر: {file_path}")
 
     if not file_path or not os.path.exists(file_path):
-        error_msg = "❌ دانلود ناموفق. لطفاً دوباره تلاش کنید."
+        error_msg = "❌ *دانلود ناموفق!*\nدلایل احتمالی:\n• لینک خصوصی است\n• اینستاگرام درخواست را مسدود کرده\n• حجم ویدیو بسیار بالا است\n\nلطفاً دوباره تلاش کنید."
         try:
             if is_photo:
-                await query.edit_message_caption(caption=error_msg, reply_markup=await back_button())
+                await query.edit_message_caption(caption=error_msg, parse_mode="Markdown", reply_markup=await back_button())
             else:
-                await query.edit_message_text(error_msg, reply_markup=await back_button())
+                await query.edit_message_text(error_msg, parse_mode="Markdown", reply_markup=await back_button())
         except Exception as e:
             print(f"⚠️ خطا در ویرایش پیام خطا: {e}")
         return
@@ -120,7 +178,8 @@ async def download_and_send(update, query, url, format_id, is_photo, is_audio=Fa
             with open(file_path, 'rb') as audio:
                 await update.effective_chat.send_audio(
                     audio=audio,
-                    caption="✅ صوت استخراج شد",
+                    caption="✅ *صوت با موفقیت استخراج شد*",
+                    parse_mode="Markdown",
                     reply_markup=await back_button(),
                     write_timeout=120,
                     read_timeout=120
@@ -129,7 +188,8 @@ async def download_and_send(update, query, url, format_id, is_photo, is_audio=Fa
             with open(file_path, 'rb') as video:
                 await update.effective_chat.send_video(
                     video=video,
-                    caption="✅ ویدیو دانلود شد",
+                    caption="✅ *ویدیو با موفقیت دانلود شد*",
+                    parse_mode="Markdown",
                     reply_markup=await back_button(),
                     write_timeout=120,
                     read_timeout=120
@@ -143,15 +203,16 @@ async def download_and_send(update, query, url, format_id, is_photo, is_audio=Fa
                 await update.effective_chat.send_document(
                     document=f,
                     filename=os.path.basename(file_path),
-                    caption="✅ دانلود شد (ارسال به صورت فایل به دلیل Timeout)",
+                    caption="✅ *دانلود شد (ارسال به صورت فایل به دلیل Timeout)*",
+                    parse_mode="Markdown",
                     reply_markup=await back_button()
                 )
             await query.message.delete()
         except Exception as e2:
-            await query.edit_message_text(f"❌ خطا در ارسال: {str(e2)[:100]}", reply_markup=await back_button())
+            await query.edit_message_text(f"❌ خطا در ارسال: `{str(e2)[:100]}`", parse_mode="Markdown", reply_markup=await back_button())
     except Exception as e:
         print(f"❌ خطای غیرمنتظره: {e}")
-        await query.edit_message_text(f"❌ خطا: {str(e)[:100]}", reply_markup=await back_button())
+        await query.edit_message_text(f"❌ خطا: `{str(e)[:100]}`", parse_mode="Markdown", reply_markup=await back_button())
     finally:
         try:
             os.remove(file_path)
@@ -163,28 +224,36 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
     url = update.message.text.strip()
     print(f"🔗 لینک دریافت شد: {url}")
     if "instagram.com" not in url:
-        await update.message.reply_text("❌ لینک معتبر اینستاگرام بفرستید.", reply_markup=await back_button())
+        await update.message.reply_text(
+            "❌ *لطفاً یک لینک معتبر اینستاگرام ارسال کنید.*\nمثال: `https://www.instagram.com/p/Cxample/`",
+            parse_mode="Markdown",
+            reply_markup=await back_button()
+        )
         return
 
-    status_msg = await update.message.reply_text("⏳ دریافت اطلاعات ویدیو...")
+    status_msg = await update.message.reply_text("⏳ *در حال دریافت اطلاعات ویدیو...* لطفاً چند ثانیه صبر کنید.", parse_mode="Markdown")
     video_info = await get_video_info(url)
 
     if not video_info:
-        await status_msg.edit_text("❌ اطلاعات ویدیو یافت نشد.", reply_markup=await back_button())
+        await status_msg.edit_text(
+            "❌ *نتیجه‌ای یافت نشد!*\nممکن است لینک خصوصی باشد یا اینستاگرام محدودیت ایجاد کرده باشد.",
+            parse_mode="Markdown",
+            reply_markup=await back_button()
+        )
         return
 
     context.user_data['pending_url'] = url
 
+    # ساخت دکمه‌های کیفیت
     keyboard = []
-    # نمایش همه فرمت‌های ویدیویی
     for fmt in video_info.get('video_formats', []):
         label = fmt['quality_label']
         size = fmt['size_mb']
         size_str = f" ({size} MB)" if size != 'Unknown' else ""
         if size != 'Unknown' and size > MAX_VIDEO_SIZE_MB:
-            keyboard.append([InlineKeyboardButton(f"⚠️ {label}{size_str} (بزرگ) ⚠️", callback_data="size_error")])
+            keyboard.append([InlineKeyboardButton(f"⚠️ {label}{size_str} (حجم بالاست) ⚠️", callback_data="size_error")])
         else:
-            keyboard.append([InlineKeyboardButton(f"📹 {label}{size_str}", callback_data=f"download_video_{fmt['format_id']}")])
+            keyboard.append([InlineKeyboardButton(f"🎥 {label}{size_str}", callback_data=f"download_video_{fmt['format_id']}")])
 
     # دکمه دانلود صدا
     if video_info.get('audio_format'):
@@ -192,8 +261,9 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         size_str = f" ({audio['size_mb']} MB)" if audio['size_mb'] != 'Unknown' else ""
         keyboard.append([InlineKeyboardButton(f"🎵 MP3 (فقط صدا){size_str}", callback_data="download_audio")])
 
-    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_menu")])
+    keyboard.append([InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")])
 
+    # اطلاعات ویدیو
     duration = video_info.get('duration')
     if duration:
         mins, secs = divmod(int(duration), 60)
@@ -201,25 +271,39 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         dur_str = "نامشخص"
 
-    caption = f"🎬 *{video_info['title'][:50]}*\n⏱️ {dur_str}\n📊 گزینه‌های موجود:"
+    caption = (
+        f"🎬 *عنوان:* `{video_info['title'][:50]}`\n"
+        f"⏱️ *مدت زمان:* `{dur_str}`\n\n"
+        f"📊 *کیفیت‌های موجود:*\n"
+        f"جهت دانلود، روی دکمه مورد نظر کلیک کنید."
+    )
 
-    if video_info.get('thumbnail'):
+    thumbnail = video_info.get('thumbnail')
+    if thumbnail:
         await status_msg.delete()
         await update.message.reply_photo(
-            photo=video_info['thumbnail'],
+            photo=thumbnail,
             caption=caption,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         context.user_data['is_photo_message'] = True
     else:
-        await status_msg.edit_text(caption, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+        await status_msg.edit_text(
+            caption,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         context.user_data['is_photo_message'] = False
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"🚨 خطای سراسری: {context.error}")
     if update and update.effective_message:
-        await update.effective_message.reply_text("⚠️ خطای داخلی", reply_markup=await back_button())
+        await update.effective_message.reply_text(
+            "⚠️ *خطای داخلی رخ داد.* لطفاً چند لحظه بعد دوباره تلاش کنید.",
+            parse_mode="Markdown",
+            reply_markup=await back_button()
+        )
 
 def main():
     print("🚀 ربات در حال راه‌اندازی...")
@@ -236,7 +320,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_link))
     app.add_error_handler(error_handler)
 
-    print("✅ ربات با قابلیت دانلود همه کیفیت‌های ویدیو (به همراه صدا) و MP3 روشن شد...")
+    print("✅ ربات با ظاهر جدید و دکمه‌های زیبا روشن شد...")
     app.run_polling()
 
 if __name__ == "__main__":
