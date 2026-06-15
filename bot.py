@@ -54,7 +54,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         help_text = "📖 راهنما: لینک اینستاگرام را بفرستید، سپس کیفیت ویدیو یا صوت را انتخاب کنید."
         await query.edit_message_text(help_text, parse_mode="Markdown", reply_markup=await back_button())
     elif data == "about":
-        about_text = "🤖 ربات دانلودر اینستاگرام - نسخه 3.0\nقابلیت دانلود ویدیو و MP3"
+        about_text = "🤖 ربات دانلودر اینستاگرام - نسخه 3.1\nقابلیت دانلود ویدیو و MP3"
         await query.edit_message_text(about_text, parse_mode="Markdown", reply_markup=await back_button())
     elif data == "back_to_menu":
         await query.edit_message_text("✨ منوی اصلی:", reply_markup=await main_menu())
@@ -94,7 +94,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await download_and_send(update, query, url, None, is_photo, is_audio=True)
 
 async def download_and_send(update, query, url, format_id, is_photo, is_audio=False):
-    """دانلود و ارسال فایل (ویدیو یا صدا)"""
     print(f"⬇️ شروع دانلود {'صوت' if is_audio else 'ویدیو'} برای: {url}")
     start_time = time.time()
     file_path = await download_instagram(url, format_id, is_audio=is_audio)
@@ -176,7 +175,6 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
 
     context.user_data['pending_url'] = url
 
-    # ساخت دکمه‌های ویدیویی (فقط رزولوشن‌های مجاز)
     keyboard = []
     for fmt in video_info.get('video_formats', []):
         label = fmt['quality_label']
@@ -187,11 +185,9 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             keyboard.append([InlineKeyboardButton(f"📹 {label}{size_str}", callback_data=f"download_video_{fmt['format_id']}")])
 
-    # دکمه دانلود صدا
-    audio_fmt = video_info.get('audio_format')
-    if audio_fmt:
-        size = audio_fmt['size_mb']
-        size_str = f" ({size} MB)" if size != 'Unknown' else ""
+    if video_info.get('audio_format'):
+        audio = video_info['audio_format']
+        size_str = f" ({audio['size_mb']} MB)" if audio['size_mb'] != 'Unknown' else ""
         keyboard.append([InlineKeyboardButton(f"🎵 MP3 (فقط صدا){size_str}", callback_data="download_audio")])
 
     keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_menu")])
@@ -238,7 +234,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_link))
     app.add_error_handler(error_handler)
 
-    print("✅ ربات با قابلیت دانلود ویدیو (فقط 144p تا 1080p) و MP3 روشن شد...")
+    print("✅ ربات با قابلیت دانلود ویدیو (ترکیب با صدا) و MP3 روشن شد...")
     app.run_polling()
 
 if __name__ == "__main__":
