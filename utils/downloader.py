@@ -8,8 +8,11 @@ from config import PROXY_URL
 TEMP_DIR = "temp"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
+# لیست رزولوشن‌های مجاز (به ترتیب از کم به زیاد)
+ALLOWED_RESOLUTIONS = [144, 360, 480, 720, 1080]
+
 async def get_video_info(url: str):
-    """دریافت اطلاعات و فرمت‌های موجود ویدیو (فقط فرمت‌های دارای صدا و تصویر)"""
+    """دریافت اطلاعات ویدیو، فرمت‌های ویدیویی مجاز و فرمت صوتی"""
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
@@ -25,12 +28,12 @@ async def get_video_info(url: str):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=False))
 
-            formats = []
+            # پردازش فرمت‌های ویدیویی (با صدا)
+            video_formats = []
             for f in info.get('formats', []):
                 # فقط فرمت‌هایی که هم ویدیو دارند هم صدا
                 if f.get('vcodec') == 'none' or f.get('acodec') == 'none':
                     continue
-                
                 height = f.get('height')
                 if not height:
                     res = f.get('resolution')
@@ -39,51 +42,63 @@ async def get_video_info(url: str):
                             height = int(res.split('x')[1])
                         except:
                             pass
-                if not height:
+                if not height or height not in ALLOWED_RESOLUTIONS:
                     continue
-
-                quality_label = f"{height}p"
+                
                 filesize = f.get('filesize') or f.get('filesize_approx')
                 size_mb = round(filesize / (1024 * 1024), 1) if filesize else 'Unknown'
                 
-                formats.append({
+                video_formats.append({
                     'format_id': f['format_id'],
                     'quality': height,
-                    'quality_label': quality_label,
+                    'quality_label': f"{height}p",
                     'size_mb': size_mb,
                     'ext': f.get('ext', 'mp4')
                 })
-            
-            # حذف تکراری‌ها (بهترین فرمت برای هر ارتفاع)
-            unique = {}
-            for fmt in formats:
+
+            # حذف تکراری‌ها (بهترین فرمت برای هر رزولوشن)
+            unique_video = {}
+            for fmt in video_formats:
                 q = fmt['quality']
-                if q not in unique:
-                    unique[q] = fmt
-                elif fmt['size_mb'] != 'Unknown' and unique[q]['size_mb'] == 'Unknown':
-                    unique[q] = fmt
+                if q not in unique_video:
+                    unique_video[q] = fmt
+                elif fmt['size_mb'] != 'Unknown' and unique_video[q]['size_mb'] == 'Unknown':
+                    unique_video[q] = fmt
             
-            sorted_formats = sorted(unique.values(), key=lambda x: x['quality'])
-            
+            # مرتب‌سازی بر اساس کیفیت (صعودی)
+            sorted_video = sorted(unique_video.values(), key=lambda x: x['quality'])
+
+            # پردازش فرمت صوتی (بهترین فرمت صوتی موجود)
+            audio_format = None
+            for f in info.get('formats', []):
+                if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
+                    filesize = f.get('filesize') or f.get('filesize_approx')
+                    size_mb = round(filesize / (1024 * 1024), 1) if filesize else 'Unknown'
+                    audio_format = {
+                        'format_id': f['format_id'],
+                        'quality_label': 'MP3 (فقط صدا)',
+                        'size_mb': size_mb,
+                        'ext': 'mp3'
+                    }
+                    break  # اولین فرمت صوتی (معمولا بهترین کیفیت)
+
             return {
                 'title': info.get('title', 'Unknown'),
                 'duration': info.get('duration'),
                 'thumbnail': info.get('thumbnail'),
-                'formats': sorted_formats
+                'video_formats': sorted_video,
+                'audio_format': audio_format
             }
     except Exception as e:
         print(f"Error in get_video_info: {e}")
         traceback.print_exc()
         return None
 
-async def download_instagram(url: str, format_id: str = None):
-    """دانلود ویدیو با فرمت انتخاب شده (ترجیحاً با صدا)"""
+async def download_instagram(url: str, format_id: str = None, is_audio: bool = False):
+    """دانلود ویدیو یا صدا با فرمت مشخص"""
     unique_id = str(uuid.uuid4())
     output_template = os.path.join(TEMP_DIR, f"insta_{unique_id}.%(ext)s")
 
-    # اگر format_id مشخص نبود، بهترین کیفیت با صدا رو انتخاب کن
-    format_spec = format_id if format_id else 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-    
     ydl_opts = {
         'outtmpl': output_template,
         'quiet': False,
@@ -95,9 +110,18 @@ async def download_instagram(url: str, format_id: str = None):
         'retries': 20,
         'fragment_retries': 20,
         'continuedl': True,
-        'format': format_spec,
-        'merge_output_format': 'mp4',  # ترکیب ویدیو و صدا در یک فایل mp4
     }
+
+    if is_audio:
+        # دانلود صدا و تبدیل به mp3
+        ydl_opts['format'] = 'bestaudio/best'
+        ydl_opts['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }]
+    elif format_id:
+        ydl_opts['format'] = format_id
 
     if PROXY_URL:
         ydl_opts['proxy'] = PROXY_URL
@@ -108,8 +132,10 @@ async def download_instagram(url: str, format_id: str = None):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=True))
             filename = ydl.prepare_filename(info)
+            if is_audio:
+                base = os.path.splitext(filename)[0]
+                filename = base + '.mp3'
             if not os.path.exists(filename):
-                # ممکن است فایل با پسوند دیگری ذخیره شده باشد
                 for f in os.listdir(TEMP_DIR):
                     if f.startswith(f"insta_{unique_id}"):
                         filename = os.path.join(TEMP_DIR, f)
