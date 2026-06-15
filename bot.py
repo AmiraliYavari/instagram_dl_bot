@@ -1,14 +1,16 @@
+# bot.py
 import asyncio
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import TimedOut, RetryAfter
 from config import BOT_TOKEN
-from utils.downloader import download_instagram
-import time
+from utils.downloader import get_video_info, download_instagram
 
 TEMP_DIR = "temp"
 os.makedirs(TEMP_DIR, exist_ok=True)
+
+MAX_VIDEO_SIZE_MB = 48  # حاشیه امن برای محدودیت 50 مگابایتی تلگرام
 
 async def main_menu():
     keyboard = [
@@ -52,12 +54,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📖 *راهنمای استفاده:*\n\n"
             "1️⃣ دکمه «دانلود از اینستاگرام» را بزنید.\n"
             "2️⃣ لینک مطلب مورد نظر را از اینستاگرام کپی کنید.\n"
-            "3️⃣ لینک را برای ربات بفرستید.\n"
-            "4️⃣ چند ثانیه صبر کنید تا فایل دانلود و ارسال شود.\n\n"
+            "3️⃣ ربات اطلاعات ویدیو را دریافت کرده و گزینه‌های کیفیت را نمایش می‌دهد.\n"
+            "4️⃣ کیفیت مورد نظر خود را انتخاب کنید.\n"
+            "5️⃣ ربات فایل را دانلود کرده و برای شما ارسال می‌کند.\n\n"
             "⚠️ نکات مهم:\n"
             "- فقط محتوای *عمومی* (public) قابل دانلود است.\n"
-            "- ویدیوهای بسیار بزرگ (بیش از 50 مگابایت) ممکن است ارسال نشوند.\n"
-            "- در صورت خطای Timeout، لطفاً دوباره تلاش کنید."
+            "- حداکثر حجم مجاز برای ارسال ویدیو در تلگرام **50 مگابایت** است.\n"
+            "- در صورت بزرگ بودن حجم ویدیو، ربات به شما اخطار می‌دهد و دانلود نمی‌کند."
         )
         await query.edit_message_text(help_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
@@ -65,7 +68,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "about":
         about_text = (
             "🤖 *ربات دانلودر اینستاگرام*\n\n"
-            "نسخه: 1.1\n"
+            "نسخه: 2.0\n"
             "ساخته شده با پایتون و کتابخانه‌های:\n"
             "- python-telegram-bot\n"
             "- yt-dlp\n\n"
@@ -80,52 +83,55 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✨ منوی اصلی:\nلطفاً یکی از گزینه‌ها را انتخاب کنید.",
             reply_markup=await main_menu()
         )
-
-async def send_with_retry(update: Update, file_path: str, caption: str, retries=2):
-    """ارسال فایل با تلاش مجدد در صورت Timeout"""
-    ext = os.path.splitext(file_path)[1].lower()
-    for attempt in range(retries):
+    elif data.startswith("download_format_"):
+        # کاربر یک کیفیت را انتخاب کرده است
+        format_id = data.replace("download_format_", "")
+        url = context.user_data.get('pending_url')
+        if not url:
+            await query.edit_message_text(
+                "❌ لینک منقضی شده است. لطفاً دوباره لینک را ارسال کنید.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
+                ])
+            )
+            return
+        
+        await query.edit_message_text("⏬ در حال دانلود ویدیو با کیفیت انتخابی...")
+        
+        file_path = await download_instagram(url, format_id)
+        
+        if not file_path or not os.path.exists(file_path):
+            await query.edit_message_text(
+                "❌ دانلود ناموفق.\nلطفاً دوباره تلاش کنید یا کیفیت دیگری را انتخاب کنید.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
+                ])
+            )
+            return
+        
+        # ارسال فایل
         try:
-            if ext in ['.mp4', '.mov', '.webm']:
-                with open(file_path, 'rb') as video:
-                    await update.message.reply_video(
-                        video=video,
-                        caption=caption,
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-                        ]),
-                        write_timeout=60,
-                        read_timeout=60,
-                        connect_timeout=60,
-                        pool_timeout=60
-                    )
-            elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
-                with open(file_path, 'rb') as photo:
-                    await update.message.reply_photo(
-                        photo=photo,
-                        caption=caption,
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-                        ])
-                    )
-            else:
-                with open(file_path, 'rb') as doc:
-                    await update.message.reply_document(
-                        document=doc,
-                        filename=os.path.basename(file_path),
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-                        ])
-                    )
-            return True
-        except (TimedOut, RetryAfter) as e:
-            print(f"Attempt {attempt+1} failed: {e}")
-            if attempt == retries - 1:
-                raise
-            await asyncio.sleep(2)
+            with open(file_path, 'rb') as video:
+                await update.effective_chat.send_video(
+                    video=video,
+                    caption="✅ دانلود شد توسط ربات",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
+                    ])
+                )
+            await query.message.delete()
         except Exception as e:
-            raise
-    return False
+            await query.edit_message_text(
+                f"❌ خطا در ارسال فایل: {str(e)[:100]}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
+                ])
+            )
+        finally:
+            try:
+                os.remove(file_path)
+            except:
+                pass
 
 async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
@@ -140,54 +146,69 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
-    status_msg = await update.message.reply_text("⏬ در حال دانلود... لطفاً صبر کنید (ممکن است 30-60 ثانیه طول بکشد).")
+    status_msg = await update.message.reply_text("⏳ در حال دریافت اطلاعات ویدیو...")
 
-    try:
-        file_path = await asyncio.wait_for(download_instagram(url), timeout=90)
-    except asyncio.TimeoutError:
+    # دریافت اطلاعات ویدیو
+    video_info = await get_video_info(url)
+    
+    if not video_info or not video_info.get('formats'):
         await status_msg.edit_text(
-            "⏰ زمان دانلود به پایان رسید. ممکن است ویدیو خیلی بزرگ باشد یا اینترنت شما کند است.\n"
-            "لطفاً دوباره تلاش کنید.",
+            "❌ نتوانستم اطلاعات ویدیو را دریافت کنم.\nممکن است لینک خصوصی باشد یا اینستاگرام محدودیت ایجاد کرده باشد.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
             ])
         )
         return
 
-    if not file_path or not os.path.exists(file_path):
-        await status_msg.edit_text(
-            "❌ دانلود ناموفق.\nدلایل احتمالی:\n- لینک خصوصی است\n- محتوا حذف شده\n- اینستاگرام محدودیت اعمال کرده",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-            ])
-        )
-        return
+    # ذخیره لینک در user_data برای استفاده بعدی
+    context.user_data['pending_url'] = url
 
-    await status_msg.edit_text("✅ دانلود کامل شد. در حال ارسال به تلگرام...")
-
+    # ساخت دکمه‌های کیفیت
+    keyboard = []
+    for fmt in video_info['formats']:
+        size_text = f" ({fmt['size_mb']} MB)" if fmt['size_mb'] != 'Unknown' else ""
+        # بررسی حجم فایل
+        if fmt['size_mb'] != 'Unknown' and fmt['size_mb'] > MAX_VIDEO_SIZE_MB:
+            # اگر حجم بیشتر از حد مجاز بود، دکمه را غیرفعال (یا با اخطار) نشان بده
+            button_text = f"⚠️ {fmt['quality']}{size_text} - حجم بالاست ⚠️"
+            keyboard.append([InlineKeyboardButton(button_text, callback_data="size_error")])
+        else:
+            button_text = f"📹 {fmt['quality']}{size_text}"
+            keyboard.append([InlineKeyboardButton(button_text, callback_data=f"download_format_{fmt['format_id']}")])
+    
+    keyboard.append([InlineKeyboardButton("🔙 انصراف و بازگشت به منو", callback_data="back_to_menu")])
+    
+    # نمایش اطلاعات ویدیو با کاور
+    caption = (
+        f"🎬 *{video_info['title'][:50]}*\n\n"
+        f"⏱️ مدت زمان: {video_info['duration'] // 60}:{video_info['duration'] % 60:02d} دقیقه\n\n"
+        f"📊 کیفیت‌های موجود:\n"
+        f"لطفاً کیفیت مورد نظر خود را انتخاب کنید:"
+    )
+    
     try:
-        await send_with_retry(update, file_path, "✅ دانلود شد توسط ربات")
-        await status_msg.delete()
-    except TimedOut:
-        await status_msg.edit_text(
-            "❌ خطا: زمان ارسال به پایان رسید. فایل ممکن است خیلی بزرگ باشد (بیش از 50 مگابایت).\n"
-            "لطفاً یک ویدیوی کوتاه‌تر را امتحان کنید.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-            ])
-        )
+        # ارسال کاور (thumbnail) اگر وجود داشته باشد
+        if video_info.get('thumbnail'):
+            await status_msg.delete()
+            await update.message.reply_photo(
+                photo=video_info['thumbnail'],
+                caption=caption,
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            await status_msg.edit_text(
+                caption,
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
     except Exception as e:
+        print(f"Error sending menu: {e}")
         await status_msg.edit_text(
-            f"❌ خطا در ارسال فایل: {str(e)[:100]}",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-            ])
+            caption,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
-    finally:
-        try:
-            os.remove(file_path)
-        except:
-            pass
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Error: {context.error}")
@@ -200,7 +221,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 def main():
-    # افزایش timeouts در سطح اپلیکیشن
     app = Application.builder() \
         .token(BOT_TOKEN) \
         .connect_timeout(60.0) \
@@ -214,7 +234,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_link))
     app.add_error_handler(error_handler)
 
-    print("ربات با منوی دکمه‌ای روشن شد... (timeouts افزایش یافته)")
+    print("ربات با منوی انتخاب کیفیت روشن شد...")
     app.run_polling()
 
 if __name__ == "__main__":
