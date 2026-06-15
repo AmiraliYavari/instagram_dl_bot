@@ -6,3 +6,5 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("لطفاً BOT_TOKEN را در فایل .env تنظیم کنید")
+
+PROXY_URL = os.getenv("PROXY_URL", None)  # اختیاری
