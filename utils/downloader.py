@@ -8,11 +8,8 @@ from config import PROXY_URL
 TEMP_DIR = "temp"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-# لیست رزولوشن‌های مجاز
-ALLOWED_RESOLUTIONS = [144, 360, 480, 720, 1080]
-
 async def get_video_info(url: str):
-    """دریافت اطلاعات ویدیو و فرمت‌های ویدیویی (حتی بدون صدا) و فرمت صوتی"""
+    """دریافت اطلاعات ویدیو، همه فرمت‌های ویدیویی (همراه با صدا یا بدون صدا) و فرمت صوتی"""
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
@@ -28,7 +25,7 @@ async def get_video_info(url: str):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=False))
 
-            # فرمت‌های ویدیویی (حتی بدون صدا)
+            # دریافت همه فرمت‌های ویدیویی (حتی بدون صدا)
             video_formats = []
             for f in info.get('formats', []):
                 if f.get('vcodec') == 'none':
@@ -41,33 +38,43 @@ async def get_video_info(url: str):
                             height = int(res.split('x')[1])
                         except:
                             pass
-                if not height or height not in ALLOWED_RESOLUTIONS:
-                    continue
+                if not height:
+                    # اگر ارتفاع نداره، برچسب بگذاریم
+                    label = f.get('format_note') or 'Unknown'
+                    height = label
+                else:
+                    label = f"{height}p"
                 
                 filesize = f.get('filesize') or f.get('filesize_approx')
                 size_mb = round(filesize / (1024 * 1024), 1) if filesize else 'Unknown'
                 
                 video_formats.append({
                     'format_id': f['format_id'],
-                    'quality': height,
-                    'quality_label': f"{height}p",
+                    'quality': height,  # می‌تواند عدد یا رشته باشد
+                    'quality_label': label,
                     'size_mb': size_mb,
                     'ext': f.get('ext', 'mp4'),
                     'has_audio': f.get('acodec') != 'none'
                 })
 
-            # حذف تکراری‌ها (بهترین فرمت برای هر رزولوشن)
+            # حذف تکراری‌ها (بر اساس quality_label)
             unique_video = {}
             for fmt in video_formats:
-                q = fmt['quality']
-                if q not in unique_video:
-                    unique_video[q] = fmt
-                elif fmt['size_mb'] != 'Unknown' and unique_video[q]['size_mb'] == 'Unknown':
-                    unique_video[q] = fmt
+                key = fmt['quality_label']
+                if key not in unique_video:
+                    unique_video[key] = fmt
+                elif fmt['size_mb'] != 'Unknown' and unique_video[key]['size_mb'] == 'Unknown':
+                    unique_video[key] = fmt
             
-            sorted_video = sorted(unique_video.values(), key=lambda x: x['quality'])
+            # مرتب‌سازی سعی می‌کند عددی باشد، وگرنه ترتیب اولیه
+            def sort_key(item):
+                val = item[1]['quality']
+                if isinstance(val, int):
+                    return val
+                return 9999
+            sorted_video = sorted(unique_video.values(), key=lambda x: x['quality'] if isinstance(x['quality'], int) else 9999)
 
-            # بهترین فرمت صوتی (برای دانلود جداگانه یا ترکیب)
+            # بهترین فرمت صوتی (برای دانلود جداگانه)
             audio_format = None
             for f in info.get('formats', []):
                 if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
@@ -94,7 +101,7 @@ async def get_video_info(url: str):
         return None
 
 async def download_instagram(url: str, format_id: str = None, is_audio: bool = False):
-    """دانلود ویدیو (ترکیب با صدا) یا صرفاً صدا"""
+    """دانلود ویدیو (با بهترین صدا) یا فقط صدا"""
     unique_id = str(uuid.uuid4())
     output_template = os.path.join(TEMP_DIR, f"insta_{unique_id}.%(ext)s")
 
@@ -109,7 +116,7 @@ async def download_instagram(url: str, format_id: str = None, is_audio: bool = F
         'retries': 20,
         'fragment_retries': 20,
         'continuedl': True,
-        'merge_output_format': 'mp4',  # خروجی نهایی mp4
+        'merge_output_format': 'mp4',
     }
 
     if is_audio:
@@ -120,8 +127,11 @@ async def download_instagram(url: str, format_id: str = None, is_audio: bool = F
             'preferredquality': '192',
         }]
     elif format_id:
-        # ترکیب ویدیوی انتخابی با بهترین صدا
+        # ویدیو را با بهترین صدا ترکیب کن
         ydl_opts['format'] = f'{format_id}+bestaudio/best'
+    else:
+        # اگر format_id نداد (اتفاق نمی‌افتد)، بهترین کیفیت ویدیو+صدا را بگیر
+        ydl_opts['format'] = 'bestvideo+bestaudio/best'
 
     if PROXY_URL:
         ydl_opts['proxy'] = PROXY_URL
