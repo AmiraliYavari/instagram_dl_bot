@@ -29,13 +29,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    # تلاش برای پاسخ، در صورت خطا ادامه می‌دهیم
     try:
         await query.answer()
     except Exception as e:
-        print(f"Error answering callback query: {e}")
-        if update.effective_message:
-            await update.effective_message.reply_text("⏰ زمان کلیک شما منقضی شده است. لطفاً مجدداً /start را بزنید.")
-        return
+        print(f"Warning: Could not answer callback query: {e}")
 
     data = query.data
 
@@ -58,8 +56,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "5️⃣ ربات فایل را دانلود کرده و برای شما ارسال می‌کند.\n\n"
             "⚠️ نکات مهم:\n"
             "- فقط محتوای *عمومی* (public) قابل دانلود است.\n"
-            "- حداکثر حجم مجاز برای ارسال ویدیو در تلگرام **50 مگابایت** است.\n"
-            "- در صورت قطع شدن دانلود، ربات به شما اطلاع می‌دهد."
+            "- حداکثر حجم مجاز برای ارسال ویدیو در تلگرام **50 مگابایت** است."
         )
         await query.edit_message_text(help_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
@@ -67,7 +64,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "about":
         about_text = (
             "🤖 *ربات دانلودر اینستاگرام*\n\n"
-            "نسخه: 2.3\n"
+            "نسخه: 2.4\n"
             "ساخته شده با پایتون\n\n"
             "📂 کد منبع:\n[GitHub Repository](https://github.com/YOUR_USERNAME/instagram_downloader_telegram_bot)\n\n"
             "💡 ربات متن‌باز است."
@@ -81,35 +78,27 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=await main_menu()
         )
     elif data == "size_error":
-        await query.answer("حجم این ویدیو بیشتر از حد مجاز 50 مگابایت است!", show_alert=True)
+        try:
+            await query.answer("حجم این ویدیو بیشتر از حد مجاز 50 مگابایت است!", show_alert=True)
+        except:
+            pass
     elif data.startswith("download_format_"):
         format_id = data.replace("download_format_", "")
         url = context.user_data.get('pending_url')
         if not url:
-            if context.user_data.get('is_photo_message'):
-                await query.edit_message_caption(
-                    caption="❌ لینک منقضی شده است. لطفاً دوباره لینک را ارسال کنید.",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-                    ])
-                )
-            else:
-                await query.edit_message_text(
-                    "❌ لینک منقضی شده است. لطفاً دوباره لینک را ارسال کنید.",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-                    ])
-                )
+            await query.message.reply_text(
+                "❌ لینک منقضی شده است. لطفاً دوباره لینک را ارسال کنید.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
+                ])
+            )
+            await query.message.delete()
             return
 
-        # نمایش پیام در حال دانلود
-        if context.user_data.get('is_photo_message'):
-            await query.edit_message_caption(
-                caption="⏬ در حال دانلود ویدیو با کیفیت انتخابی... (لطفاً صبر کنید)",
-                reply_markup=None
-            )
-        else:
-            await query.edit_message_text("⏬ در حال دانلود ویدیو با کیفیت انتخابی... (لطفاً صبر کنید)")
+        # ارسال پیام وضعیت جدید (به جای ویرایش پیام قبلی)
+        status_msg = await query.message.reply_text("⏬ در حال دانلود ویدیو با کیفیت انتخابی... (لطفاً صبر کنید)")
+        # حذف پیام منو (دکمه‌های قبلی)
+        await query.message.delete()
 
         file_path = await download_instagram(url, format_id)
 
@@ -122,23 +111,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "- حجم ویدیو بسیار بالا است\n\n"
                 "لطفاً دوباره تلاش کنید یا کیفیت پایین‌تری انتخاب کنید."
             )
-            if context.user_data.get('is_photo_message'):
-                await query.edit_message_caption(
-                    caption=error_msg,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-                    ])
-                )
-            else:
-                await query.edit_message_text(
-                    error_msg,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-                    ])
-                )
+            await status_msg.edit_text(
+                error_msg,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
+                ])
+            )
             return
 
-        # ارسال فایل
+        # ارسال فایل به تلگرام
         try:
             with open(file_path, 'rb') as video:
                 await update.effective_chat.send_video(
@@ -148,23 +129,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
                     ])
                 )
-            await query.message.delete()
+            await status_msg.delete()  # پیام وضعیت را حذف کن
         except Exception as e:
             err_msg = f"❌ خطا در ارسال فایل: {str(e)[:100]}"
-            if context.user_data.get('is_photo_message'):
-                await query.edit_message_caption(
-                    caption=err_msg,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-                    ])
-                )
-            else:
-                await query.edit_message_text(
-                    err_msg,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
-                    ])
-                )
+            await status_msg.edit_text(
+                err_msg,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
+                ])
+            )
         finally:
             try:
                 os.remove(file_path)
@@ -248,21 +221,18 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
     thumbnail = video_info.get('thumbnail')
     if thumbnail:
         await status_msg.delete()
-        sent_photo = await update.message.reply_photo(
+        await update.message.reply_photo(
             photo=thumbnail,
             caption=caption,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        context.user_data['is_photo_message'] = True
-        context.user_data['menu_message_id'] = sent_photo.message_id
     else:
         await status_msg.edit_text(
             caption,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        context.user_data['is_photo_message'] = False
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Error: {context.error}")
@@ -288,7 +258,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_link))
     app.add_error_handler(error_handler)
 
-    print("ربات با منوی انتخاب کیفیت (نسخه نهایی با مدیریت خطای دانلود) روشن شد...")
+    print("ربات با منوی انتخاب کیفیت (نسخه نهایی با رفع خطای ارسال) روشن شد...")
     app.run_polling()
 
 if __name__ == "__main__":
