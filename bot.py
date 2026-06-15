@@ -29,11 +29,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    # تلاش برای پاسخ، در صورت خطا ادامه می‌دهیم
     try:
         await query.answer()
     except Exception as e:
-        print(f"Warning: Could not answer callback query: {e}")
+        print(f"Warning: {e}")
 
     data = query.data
 
@@ -64,7 +63,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "about":
         about_text = (
             "🤖 *ربات دانلودر اینستاگرام*\n\n"
-            "نسخه: 2.4\n"
+            "نسخه: 2.5\n"
             "ساخته شده با پایتون\n\n"
             "📂 کد منبع:\n[GitHub Repository](https://github.com/YOUR_USERNAME/instagram_downloader_telegram_bot)\n\n"
             "💡 ربات متن‌باز است."
@@ -86,20 +85,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         format_id = data.replace("download_format_", "")
         url = context.user_data.get('pending_url')
         if not url:
-            await query.message.reply_text(
+            await query.edit_message_text(
                 "❌ لینک منقضی شده است. لطفاً دوباره لینک را ارسال کنید.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
                 ])
             )
-            await query.message.delete()
             return
 
-        # ارسال پیام وضعیت جدید (به جای ویرایش پیام قبلی)
-        status_msg = await query.message.reply_text("⏬ در حال دانلود ویدیو با کیفیت انتخابی... (لطفاً صبر کنید)")
-        # حذف پیام منو (دکمه‌های قبلی)
-        await query.message.delete()
+        # بلافاصله پیام منو را به "در حال دانلود..." تغییر بده
+        await query.edit_message_text(
+            "⏬ در حال دانلود ویدیو با کیفیت انتخابی... (لطفاً صبر کنید)",
+            reply_markup=None  # دکمه‌ها را بردار
+        )
 
+        # دانلود فایل
         file_path = await download_instagram(url, format_id)
 
         if not file_path or not os.path.exists(file_path):
@@ -111,7 +111,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "- حجم ویدیو بسیار بالا است\n\n"
                 "لطفاً دوباره تلاش کنید یا کیفیت پایین‌تری انتخاب کنید."
             )
-            await status_msg.edit_text(
+            await query.edit_message_text(
                 error_msg,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
@@ -119,7 +119,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # ارسال فایل به تلگرام
+        # ارسال فایل به تلگرام (در یک پیام جدید)
         try:
             with open(file_path, 'rb') as video:
                 await update.effective_chat.send_video(
@@ -129,10 +129,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
                     ])
                 )
-            await status_msg.delete()  # پیام وضعیت را حذف کن
+            # پیام "در حال دانلود..." را هم پاک می‌کنیم (اختیاری)
+            await query.message.delete()
         except Exception as e:
             err_msg = f"❌ خطا در ارسال فایل: {str(e)[:100]}"
-            await status_msg.edit_text(
+            await query.edit_message_text(
                 err_msg,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
@@ -258,7 +259,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_link))
     app.add_error_handler(error_handler)
 
-    print("ربات با منوی انتخاب کیفیت (نسخه نهایی با رفع خطای ارسال) روشن شد...")
+    print("ربات با منوی انتخاب کیفیت (نسخه نهایی با ویرایش فوری) روشن شد...")
     app.run_polling()
 
 if __name__ == "__main__":
