@@ -9,7 +9,7 @@ from utils.downloader import get_video_info, download_instagram
 TEMP_DIR = "temp"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-MAX_VIDEO_SIZE_MB = 48  # حاشیه امن برای محدودیت 50 مگابایتی تلگرام
+MAX_VIDEO_SIZE_MB = 48
 
 async def main_menu():
     keyboard = [
@@ -26,24 +26,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ فقط کافیست یکی از گزینه‌های زیر را انتخاب کنید."
     )
     await update.message.reply_text(welcome_text, reply_markup=await main_menu())
-
-def extract_quality_label(format_note: str, height: int = None) -> str:
-    """تبدیل اطلاعات فرمت به برچسبی مثل 360p, 720p و ..."""
-    # ابتدا سعی می‌کنیم از height استفاده کنیم
-    if height:
-        return f"{height}p"
-    # اگر ارتفاع نبود، از format_note استفاده می‌کنیم
-    if format_note:
-        # استخراج اعداد از رشته مثل "480x360" -> 360
-        match = re.search(r'(\d+)x(\d+)', format_note)
-        if match:
-            height_val = int(match.group(2))
-            return f"{height_val}p"
-        # بعضی وقتا مستقیم می‌گوید "360p"
-        match = re.search(r'(\d+)p', format_note)
-        if match:
-            return f"{match.group(1)}p"
-    return format_note or "Unknown"
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -76,8 +58,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "5️⃣ ربات فایل را دانلود کرده و برای شما ارسال می‌کند.\n\n"
             "⚠️ نکات مهم:\n"
             "- فقط محتوای *عمومی* (public) قابل دانلود است.\n"
-            "- حداکثر حجم مجاز برای ارسال ویدیو در تلگرام **50 مگابایت** است.\n"
-            "- در صورت بزرگ بودن حجم ویدیو، ربات به شما اخطار می‌دهد و دانلود نمی‌کند."
+            "- حداکثر حجم مجاز برای ارسال ویدیو در تلگرام **50 مگابایت** است."
         )
         await query.edit_message_text(help_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
@@ -85,10 +66,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "about":
         about_text = (
             "🤖 *ربات دانلودر اینستاگرام*\n\n"
-            "نسخه: 2.1\n"
-            "ساخته شده با پایتون و کتابخانه‌های:\n"
-            "- python-telegram-bot\n"
-            "- yt-dlp\n\n"
+            "نسخه: 2.2\n"
+            "ساخته شده با پایتون\n\n"
             "📂 کد منبع:\n[GitHub Repository](https://github.com/YOUR_USERNAME/instagram_downloader_telegram_bot)\n\n"
             "💡 ربات متن‌باز است."
         )
@@ -106,7 +85,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         format_id = data.replace("download_format_", "")
         url = context.user_data.get('pending_url')
         if not url:
-            # اگر پیام اصلی عکس بوده، کپشن را عوض می‌کنیم در غیر این صورت متن را
             if context.user_data.get('is_photo_message'):
                 await query.edit_message_caption(
                     caption="❌ لینک منقضی شده است. لطفاً دوباره لینک را ارسال کنید.",
@@ -123,7 +101,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             return
         
-        # نمایش پیام در حال دانلود (بسته به نوع پیام)
         if context.user_data.get('is_photo_message'):
             await query.edit_message_caption(
                 caption="⏬ در حال دانلود ویدیو با کیفیت انتخابی...",
@@ -152,7 +129,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             return
         
-        # ارسال فایل
         try:
             with open(file_path, 'rb') as video:
                 await update.effective_chat.send_video(
@@ -162,7 +138,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
                     ])
                 )
-            # حذف پیام منوی قبلی (که عکس یا متن بود)
             await query.message.delete()
         except Exception as e:
             err_msg = f"❌ خطا در ارسال فایل: {str(e)[:100]}"
@@ -203,9 +178,24 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
 
     video_info = await get_video_info(url)
     
-    if not video_info or not video_info.get('formats'):
+    if not video_info:
         await status_msg.edit_text(
             "❌ نتوانستم اطلاعات ویدیو را دریافت کنم.\nممکن است لینک خصوصی باشد یا اینستاگرام محدودیت ایجاد کرده باشد.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
+            ])
+        )
+        return
+    
+    formats = video_info.get('formats', [])
+    if not formats:
+        await status_msg.edit_text(
+            "❌ هیچ فرمت ویدیویی قابل دانلودی پیدا نشد.\n\n"
+            "دلایل احتمالی:\n"
+            "- لینک مربوط به یک عکس (نه ویدیو) است\n"
+            "- محتوا خصوصی است\n"
+            "- اینستاگرام محدودیت ایجاد کرده\n\n"
+            "لطفاً یک لینک ویدیوی عمومی دیگر امتحان کنید.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
             ])
@@ -214,47 +204,22 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
 
     context.user_data['pending_url'] = url
 
-    # گروه‌بندی کیفیت‌ها (حذف تکراری‌ها با همان وضوح)
-    quality_map = {}  # key: quality_label, value: format_id
-    for fmt in video_info['formats']:
-        # استخراج وضوح (height)
-        height = fmt.get('height')
-        quality_label = extract_quality_label(fmt.get('format_note'), height)
-        if quality_label == "Unknown":
-            continue
-        # فقط بهترین فرمت برای هر کیفیت را نگه دار (اولین بار که می‌بینیم)
-        if quality_label not in quality_map:
-            quality_map[quality_label] = {
-                'format_id': fmt['format_id'],
-                'size_mb': fmt['size_mb'],
-                'quality_label': quality_label
-            }
-    
-    # مرتب‌سازی بر اساس عدد p (مثلاً 144, 360, 480, ...)
-    def sort_key(item):
-        label = item[0]
-        match = re.search(r'(\d+)p', label)
-        if match:
-            return int(match.group(1))
-        return 999
-    sorted_qualities = sorted(quality_map.items(), key=sort_key)
-    
     keyboard = []
-    for q_label, q_info in sorted_qualities:
-        size_mb = q_info['size_mb']
+    for fmt in formats:
+        quality_label = fmt['quality_label']
+        size_mb = fmt['size_mb']
         size_text = f" ({size_mb} MB)" if size_mb != 'Unknown' else ""
-        format_id = q_info['format_id']
+        format_id = fmt['format_id']
         
         if size_mb != 'Unknown' and size_mb > MAX_VIDEO_SIZE_MB:
-            button_text = f"⚠️ {q_label}{size_text} - حجم بالاست ⚠️"
+            button_text = f"⚠️ {quality_label}{size_text} - حجم بالاست ⚠️"
             keyboard.append([InlineKeyboardButton(button_text, callback_data="size_error")])
         else:
-            button_text = f"📹 {q_label}{size_text}"
+            button_text = f"📹 {quality_label}{size_text}"
             keyboard.append([InlineKeyboardButton(button_text, callback_data=f"download_format_{format_id}")])
     
     keyboard.append([InlineKeyboardButton("🔙 انصراف و بازگشت به منو", callback_data="back_to_menu")])
     
-    # مدت زمان
     duration = video_info.get('duration')
     if duration and isinstance(duration, (int, float)):
         minutes = int(duration // 60)
@@ -270,7 +235,6 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         f"لطفاً کیفیت مورد نظر خود را انتخاب کنید:"
     )
     
-    # ارسال منو: اگر کاور داشتیم به صورت عکس می‌فرستیم، در غیر این صورت متن
     thumbnail = video_info.get('thumbnail')
     if thumbnail:
         await status_msg.delete()
@@ -280,7 +244,6 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        # ذخیره می‌کنیم که این پیام از نوع عکس است
         context.user_data['is_photo_message'] = True
         context.user_data['menu_message_id'] = sent_photo.message_id
     else:

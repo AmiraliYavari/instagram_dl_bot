@@ -1,4 +1,3 @@
-# utils/downloader.py
 import yt_dlp
 import asyncio
 import uuid
@@ -25,37 +24,49 @@ async def get_video_info(url: str):
     try:
         loop = asyncio.get_event_loop()
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # فقط اطلاعات را دریافت کن، دانلود نکن
             info = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=False))
             
             formats = []
             for f in info.get('formats', []):
-                # فیلتر کردن فرمت‌های ویدیویی معتبر
-                if f.get('vcodec') != 'none' and f.get('acodec') != 'none':
-                    format_note = f.get('format_note') or f.get('resolution') or 'Unknown'
-                    # تبدیل حجم به MB
-                    file_size = f.get('filesize')
-                    if not file_size and f.get('filesize_approx'):
-                        file_size = f.get('filesize_approx')
-                    
-                    size_mb = round(file_size / (1024 * 1024), 1) if file_size else 'Unknown'
-                    format_id = f['format_id']
-                    
-                    formats.append({
-                        'format_id': format_id,
-                        'quality': format_note,
-                        'size_mb': size_mb,
-                        'ext': f.get('ext', 'mp4')
-                    })
+                # فقط فرمت‌هایی که هم ویدیو دارند هم صدا (یا حداقل ویدیو)
+                vcodec = f.get('vcodec')
+                if vcodec == 'none':
+                    continue
+                
+                # استخراج رزولوشن (height)
+                height = f.get('height')
+                if not height:
+                    # گاهی height در `resolution` هست
+                    res = f.get('resolution')
+                    if res and 'x' in res:
+                        height = int(res.split('x')[1])
+                
+                if not height:
+                    continue
+                
+                # استخراج حجم
+                filesize = f.get('filesize') or f.get('filesize_approx')
+                size_mb = round(filesize / (1024 * 1024), 1) if filesize else 'Unknown'
+                
+                formats.append({
+                    'format_id': f['format_id'],
+                    'quality': height,  # عددی برای مرتب‌سازی
+                    'quality_label': f"{height}p",
+                    'size_mb': size_mb,
+                    'ext': f.get('ext', 'mp4')
+                })
             
-            # حذف فرمت‌های تکراری بر اساس کیفیت (بهترین کیفیت را نگه دار)
+            # حذف فرمت‌های تکراری بر اساس ارتفاع (بالاترین کیفیت برای هر ارتفاع)
             unique_formats = {}
-            for f in formats:
-                key = f['quality']
-                if key not in unique_formats or (f['size_mb'] != 'Unknown' and unique_formats[key].get('size_mb') == 'Unknown'):
-                    unique_formats[key] = f
+            for fmt in formats:
+                q = fmt['quality']
+                if q not in unique_formats:
+                    unique_formats[q] = fmt
+                # اگر ارتفاع تکراری بود، فرمتی با حجم مشخص ترجیح داده شود
+                elif fmt['size_mb'] != 'Unknown' and unique_formats[q]['size_mb'] == 'Unknown':
+                    unique_formats[q] = fmt
             
-            # مرتب‌سازی از کم کیفیت به پرکیفیت (بر اساس وضوح)
+            # مرتب‌سازی از کم به زیاد
             sorted_formats = sorted(unique_formats.values(), key=lambda x: x['quality'])
             
             return {
