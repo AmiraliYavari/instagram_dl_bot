@@ -27,35 +27,49 @@ async def get_video_info(url: str):
 
             formats = []
             for f in info.get('formats', []):
-                vcodec = f.get('vcodec')
-                if vcodec == 'none':
+                # فقط فرمت‌های ویدیویی (نه فقط صدا)
+                if f.get('vcodec') == 'none':
                     continue
+                # استخراج ارتفاع (رزولوشن عمودی)
                 height = f.get('height')
-                if not height and f.get('resolution'):
-                    try:
-                        height = int(f['resolution'].split('x')[1])
-                    except:
-                        pass
+                if not height:
+                    # گاهی در resolution وجود دارد مثل "1920x1080"
+                    res = f.get('resolution')
+                    if res and 'x' in res:
+                        try:
+                            height = int(res.split('x')[1])
+                        except:
+                            pass
                 if not height:
                     continue
+
+                # تبدیل ارتفاع به برچسب مثل 360p, 720p
+                quality_label = f"{height}p"
+                
+                # حجم فایل
                 filesize = f.get('filesize') or f.get('filesize_approx')
                 size_mb = round(filesize / (1024 * 1024), 1) if filesize else 'Unknown'
+                
                 formats.append({
                     'format_id': f['format_id'],
-                    'quality': height,
-                    'quality_label': f"{height}p",
+                    'quality': height,  # عددی برای مرتب‌سازی
+                    'quality_label': quality_label,
                     'size_mb': size_mb,
                     'ext': f.get('ext', 'mp4')
                 })
-
-            # حذف تکراری‌ها (بهترین فرمت برای هر کیفیت)
+            
+            # حذف تکراری‌ها: برای هر ارتفاع فقط یک فرمت (بهترین کیفیت و با حجم مشخص)
             unique = {}
             for fmt in formats:
                 q = fmt['quality']
-                if q not in unique or (fmt['size_mb'] != 'Unknown' and unique[q]['size_mb'] == 'Unknown'):
+                if q not in unique:
                     unique[q] = fmt
+                elif fmt['size_mb'] != 'Unknown' and unique[q]['size_mb'] == 'Unknown':
+                    unique[q] = fmt
+            
+            # مرتب‌سازی از کم به زیاد (144p, 240p, 360p, ...)
             sorted_formats = sorted(unique.values(), key=lambda x: x['quality'])
-
+            
             return {
                 'title': info.get('title', 'Unknown'),
                 'duration': info.get('duration'),
@@ -68,26 +82,23 @@ async def get_video_info(url: str):
         return None
 
 async def download_instagram(url: str, format_id: str = None):
-    """دانلود ویدیو با فرمت انتخاب شده (با لاگ کامل و تلاش مجدد)"""
+    """دانلود ویدیو با فرمت انتخاب شده (با لاگ کامل)"""
     unique_id = str(uuid.uuid4())
     output_template = os.path.join(TEMP_DIR, f"insta_{unique_id}.%(ext)s")
 
     ydl_opts = {
         'outtmpl': output_template,
-        'quiet': False,               # نمایش خروجی کامل در ترمینال
+        'quiet': False,
         'no_warnings': False,
         'headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
         },
         'socket_timeout': 90,
-        'retries': 20,                # تعداد تلاش مجدد
+        'retries': 20,
         'fragment_retries': 20,
-        'skip_unavailable_fragments': False,
-        'continuedl': True,           # ادامه دانلود نیمه‌تمام
+        'continuedl': True,
     }
 
     if format_id:
