@@ -10,7 +10,7 @@ from utils.downloader import get_video_info, download_instagram
 TEMP_DIR = "temp"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-MAX_VIDEO_SIZE_MB = 48
+MAX_VIDEO_SIZE_MB = 48  # حداکثر حجم مجاز برای ارسال
 
 async def main_menu():
     keyboard = [
@@ -54,13 +54,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         help_text = "📖 راهنما: لینک اینستاگرام را بفرستید، سپس کیفیت را انتخاب کنید."
         await query.edit_message_text(help_text, parse_mode="Markdown", reply_markup=await back_button())
     elif data == "about":
-        about_text = "🤖 ربات دانلودر اینستاگرام - نسخه 2.8\nمتن‌باز"
+        about_text = "🤖 ربات دانلودر اینستاگرام - نسخه 2.9\nمتن‌باز"
         await query.edit_message_text(about_text, parse_mode="Markdown", reply_markup=await back_button())
     elif data == "back_to_menu":
         await query.edit_message_text("✨ منوی اصلی:", reply_markup=await main_menu())
     elif data == "size_error":
         try:
-            await query.answer("حجم ویدیو بیشتر از 48 مگابایت است!", show_alert=True)
+            await query.answer("حجم ویدیو بیشتر از حد مجاز 48 مگابایت است!", show_alert=True)
         except:
             pass
     elif data.startswith("download_format_"):
@@ -73,6 +73,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         is_photo = context.user_data.get('is_photo_message', False)
         print(f"⬇️ شروع دانلود برای: {url} با فرمت {format_id}")
+
+        # قبل از دانلود، دوباره حجم و کیفیت رو بررسی کن (برای اطمینان)
+        temp_info = await get_video_info(url)
+        selected_format = None
+        if temp_info and temp_info.get('formats'):
+            for fmt in temp_info['formats']:
+                if fmt['format_id'] == format_id:
+                    selected_format = fmt
+                    break
+        if selected_format and selected_format['size_mb'] != 'Unknown' and selected_format['size_mb'] > MAX_VIDEO_SIZE_MB:
+            error_msg = f"❌ حجم ویدیوی انتخابی ({selected_format['quality_label']}) {selected_format['size_mb']} MB است که از حد مجاز 48 MB بیشتر است."
+            await query.edit_message_text(error_msg, reply_markup=await back_button())
+            return
+
         # تغییر پیام منو به "در حال دانلود..."
         try:
             if is_photo:
@@ -100,9 +114,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         file_size = os.path.getsize(file_path) / (1024 * 1024)
-        print(f"📦 حجم فایل: {file_size:.2f} MB")
+        print(f"📦 حجم فایل دانلود شده: {file_size:.2f} MB")
 
-        # ارسال فایل به تلگرام با لاگ کامل
+        # بررسی مجدد حجم فایل دانلود شده
+        if file_size > MAX_VIDEO_SIZE_MB:
+            error_msg = f"❌ حجم فایل دانلود شده ({file_size:.1f} MB) بیشتر از حد مجاز 48 MB است. قابلیت ارسال وجود ندارد."
+            await query.edit_message_text(error_msg, reply_markup=await back_button())
+            os.remove(file_path)
+            return
+
+        # ارسال فایل به تلگرام
         try:
             print("📤 شروع ارسال ویدیو به تلگرام...")
             with open(file_path, 'rb') as video:
@@ -214,7 +235,7 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data['is_photo_message'] = False
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print(f"🚨 خطای全局: {context.error}")
+    print(f"🚨 خطای کلی: {context.error}")
     if update and update.effective_message:
         await update.effective_message.reply_text("⚠️ خطای داخلی", reply_markup=await back_button())
 
