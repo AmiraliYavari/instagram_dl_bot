@@ -1,6 +1,5 @@
 import asyncio
 import os
-import shutil
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from config import BOT_TOKEN
@@ -27,9 +26,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    # پاسخ به query با مدیریت خطای انقضا
+    try:
+        await query.answer()
+    except Exception as e:
+        print(f"Error answering callback query: {e}")
+        # اگر خطا خورد، به کاربر پیام می‌دهیم که دوباره /start کند
+        if update.effective_message:
+            await update.effective_message.reply_text("⏰ زمان کلیک شما منقضی شده است. لطفاً مجدداً /start را بزنید.")
+        return
 
-    if query.data == "download":
+    data = query.data
+
+    if data == "download":
         await query.edit_message_text(
             "🔗 لطفاً لینک پست، استوری، ریلز یا هایلایت اینستاگرام را ارسال کنید.\n\n"
             "مثال: `https://www.instagram.com/p/Cxample/`",
@@ -38,7 +47,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
             ])
         )
-    elif query.data == "help":
+    elif data == "help":
         help_text = (
             "📖 *راهنمای استفاده:*\n\n"
             "1️⃣ دکمه «دانلود از اینستاگرام» را بزنید.\n"
@@ -48,26 +57,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ نکات مهم:\n"
             "- فقط محتوای *عمومی* (public) قابل دانلود است.\n"
             "- استوری‌های خصوصی و پیج‌های قفل شده پشتیبانی نمی‌شوند.\n"
-            "- حداکثر حجم فایل ارسالی تلگرام 50 مگابایت است (ویدیوهای طولانی ممکن است ارسال نشوند)."
+            "- حداکثر حجم فایل ارسالی تلگرام 50 مگابایت است."
         )
         await query.edit_message_text(help_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
         ]))
-    elif query.data == "about":
+    elif data == "about":
         about_text = (
             "🤖 *ربات دانلودر اینستاگرام*\n\n"
             "نسخه: 1.0\n"
             "ساخته شده با پایتون و کتابخانه‌های:\n"
             "- python-telegram-bot\n"
             "- yt-dlp\n\n"
-            "📂 کد منبع و مستندات:\n"
-            "[GitHub Repository](https://github.com/YOUR_USERNAME/instagram_downloader_telegram_bot)\n\n"
-            "💡 این ربات متن‌باز است و برای استفاده شخصی طراحی شده."
+            "📂 کد منبع:\n[GitHub Repository](https://github.com/YOUR_USERNAME/instagram_downloader_telegram_bot)\n\n"
+            "💡 ربات متن‌باز است."
         )
         await query.edit_message_text(about_text, parse_mode="Markdown", disable_web_page_preview=True, reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
         ]))
-    elif query.data == "back_to_menu":
+    elif data == "back_to_menu":
         await query.edit_message_text(
             "✨ منوی اصلی:\nلطفاً یکی از گزینه‌ها را انتخاب کنید.",
             reply_markup=await main_menu()
@@ -78,8 +86,7 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
 
     if not ("instagram.com" in url or "instagr.am" in url):
         await update.message.reply_text(
-            "❌ لطفاً یک لینک معتبر اینستاگرام بفرستید.\n"
-            "مثال: `https://www.instagram.com/p/Cxample/`",
+            "❌ لطفاً یک لینک معتبر اینستاگرام بفرستید.\nمثال: `https://www.instagram.com/p/Cxample/`",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
@@ -106,7 +113,7 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
             with open(file_path, 'rb') as video:
                 await update.message.reply_video(
                     video=video,
-                    caption="✅ دانلود شد توسط ربات اینستاگرام دانلودر",
+                    caption="✅ دانلود شد توسط ربات",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")]
                     ])
