@@ -9,7 +9,6 @@ from utils.downloader import download_instagram
 TEMP_DIR = "temp"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-# ========== منو و دکمه‌ها ==========
 async def main_menu():
     keyboard = [
         [InlineKeyboardButton("📥 دانلود از اینستاگرام", callback_data="download")],
@@ -18,7 +17,6 @@ async def main_menu():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# ========== دستور /start ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "✨ به ربات دانلودر اینستاگرام خوش آمدید! ✨\n\n"
@@ -27,10 +25,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(welcome_text, reply_markup=await main_menu())
 
-# ========== پردازش دکمه‌ها ==========
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # اعلان کوتاه به تلگرام که کلیک ثبت شد
+    await query.answer()
 
     if query.data == "download":
         await query.edit_message_text(
@@ -76,10 +73,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=await main_menu()
         )
 
-# ========== پردازش لینک اینستاگرام ==========
 async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
-    chat_id = update.effective_chat.id
 
     if not ("instagram.com" in url or "instagr.am" in url):
         await update.message.reply_text(
@@ -160,12 +155,10 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_link))
     app.add_error_handler(error_handler)
-
     print("ربات با منوی دکمه‌ای روشن شد...")
     app.run_polling()
 

@@ -2,7 +2,7 @@ import yt_dlp
 import asyncio
 import uuid
 import os
-from config import PROXY_URL  # اضافه شد
+from config import PROXY_URL
 
 TEMP_DIR = "temp"
 os.makedirs(TEMP_DIR, exist_ok=True)
@@ -23,10 +23,13 @@ async def download_instagram(url: str):
         },
     }
 
-    # اگر PROXY_URL در env تنظیم شده باشد، به opts اضافه می‌شود
+    # تنظیم پروکسی اگر در env موجود باشد
     if PROXY_URL:
         ydl_opts['proxy'] = PROXY_URL
         print(f"✅ از پروکسی استفاده می‌شود: {PROXY_URL}")
+    else:
+        # در صورت نبود پروکسی در env، از متغیرهای محیطی سیستم استفاده می‌شود
+        print("ℹ️ هیچ پروکسی در .env تنظیم نشده، در صورت نیاز متغیرهای HTTP_PROXY/HTTPS_PROXY را بررسی کنید")
 
     try:
         loop = asyncio.get_event_loop()
@@ -44,5 +47,5 @@ async def download_instagram(url: str):
         print(f"DownloadError: {e}")
         return None
     except Exception as e:
-        print(f"General error: {e}")
+        print(f"General error in download_instagram: {e}")
         return None
