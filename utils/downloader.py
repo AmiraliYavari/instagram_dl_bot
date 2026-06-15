@@ -21,15 +21,14 @@ async def download_instagram(url: str):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9',
         },
+        'socket_timeout': 60,       # افزایش timeout سوکت
+        'retries': 10,               # تعداد تلاش مجدد
+        'fragment_retries': 10,
     }
 
-    # تنظیم پروکسی اگر در env موجود باشد
     if PROXY_URL:
         ydl_opts['proxy'] = PROXY_URL
         print(f"✅ از پروکسی استفاده می‌شود: {PROXY_URL}")
-    else:
-        # در صورت نبود پروکسی در env، از متغیرهای محیطی سیستم استفاده می‌شود
-        print("ℹ️ هیچ پروکسی در .env تنظیم نشده، در صورت نیاز متغیرهای HTTP_PROXY/HTTPS_PROXY را بررسی کنید")
 
     try:
         loop = asyncio.get_event_loop()
@@ -42,10 +41,6 @@ async def download_instagram(url: str):
                         filename = os.path.join(TEMP_DIR, f)
                         break
             return filename if os.path.exists(filename) else None
-
-    except yt_dlp.utils.DownloadError as e:
-        print(f"DownloadError: {e}")
-        return None
     except Exception as e:
-        print(f"General error in download_instagram: {e}")
+        print(f"Error in download_instagram: {e}")
         return None
