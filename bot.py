@@ -1,4 +1,3 @@
-# bot.py
 import asyncio
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -83,8 +82,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✨ منوی اصلی:\nلطفاً یکی از گزینه‌ها را انتخاب کنید.",
             reply_markup=await main_menu()
         )
+    elif data == "size_error":
+        await query.answer("حجم این ویدیو بیشتر از حد مجاز 50 مگابایت است!", show_alert=True)
     elif data.startswith("download_format_"):
-        # کاربر یک کیفیت را انتخاب کرده است
         format_id = data.replace("download_format_", "")
         url = context.user_data.get('pending_url')
         if not url:
@@ -148,7 +148,6 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
 
     status_msg = await update.message.reply_text("⏳ در حال دریافت اطلاعات ویدیو...")
 
-    # دریافت اطلاعات ویدیو
     video_info = await get_video_info(url)
     
     if not video_info or not video_info.get('formats'):
@@ -160,16 +159,12 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
-    # ذخیره لینک در user_data برای استفاده بعدی
     context.user_data['pending_url'] = url
 
-    # ساخت دکمه‌های کیفیت
     keyboard = []
     for fmt in video_info['formats']:
         size_text = f" ({fmt['size_mb']} MB)" if fmt['size_mb'] != 'Unknown' else ""
-        # بررسی حجم فایل
         if fmt['size_mb'] != 'Unknown' and fmt['size_mb'] > MAX_VIDEO_SIZE_MB:
-            # اگر حجم بیشتر از حد مجاز بود، دکمه را غیرفعال (یا با اخطار) نشان بده
             button_text = f"⚠️ {fmt['quality']}{size_text} - حجم بالاست ⚠️"
             keyboard.append([InlineKeyboardButton(button_text, callback_data="size_error")])
         else:
@@ -178,16 +173,23 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
     
     keyboard.append([InlineKeyboardButton("🔙 انصراف و بازگشت به منو", callback_data="back_to_menu")])
     
-    # نمایش اطلاعات ویدیو با کاور
+    # اصلاح مدت زمان (رفع خطای float)
+    duration = video_info.get('duration')
+    if duration and isinstance(duration, (int, float)):
+        minutes = int(duration // 60)
+        seconds = int(duration % 60)
+        duration_str = f"{minutes}:{seconds:02d}"
+    else:
+        duration_str = "نامشخص"
+    
     caption = (
         f"🎬 *{video_info['title'][:50]}*\n\n"
-        f"⏱️ مدت زمان: {video_info['duration'] // 60}:{video_info['duration'] % 60:02d} دقیقه\n\n"
+        f"⏱️ مدت زمان: {duration_str}\n\n"
         f"📊 کیفیت‌های موجود:\n"
         f"لطفاً کیفیت مورد نظر خود را انتخاب کنید:"
     )
     
     try:
-        # ارسال کاور (thumbnail) اگر وجود داشته باشد
         if video_info.get('thumbnail'):
             await status_msg.delete()
             await update.message.reply_photo(
